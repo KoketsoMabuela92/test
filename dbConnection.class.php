@@ -1,5 +1,23 @@
 <?php
 require_once('ConnetAutoloader.php');
+
+class thisLogger extends logger {
+	
+}
+
+$day = date('Y-m-d');
+thisLogger::setLogFilename("/var/log/connet/campaigns/pricecheck_databaseFunctions$day.log");
+thisLogger::setBacktrace();
+
+define('ERROR_REPORTING',0);
+
+//ENABLE LOGGING
+if (ERROR_REPORTING) {
+	clog::setLogLevel(0);
+	thisLogger::setLogLevel(0);
+	thisLogger::setVerbose();
+}
+
 /**
  *@author koketso mabuela
  * @descripton class that all the database functionality 
@@ -319,6 +337,67 @@ class dbConnection {
 		} else {
 			
 			thisLogger::debug("$sem_id could not be recognised");
+			return FALSE;
+		}
+	}
+	
+	/**
+	 *@description function that gets all the products data from the database, and calls the semantics3 api for updated info
+	 *@return array of sem3_id's and seller names
+	 */
+	static function getSem3Ids () {
+		
+		$con = self::openConnection();
+		$semIDArray = array();
+		$getSemID = sprintf("SELECT * FROM products");
+		$res = $con->query($getSemID);
+		
+		if ($con->affected_rows > 0) {
+			
+			//product exists
+			
+			for ($x = 0; $x < $con->affected_rows; $x++) {
+				
+				$currentRow = $res->fetch_assoc();
+				$sem3_id = stripslashes($currentRow["sem3_id"]);
+				$seller = stripslashes($currentRow["seller"]);
+				$product_id = stripslashes($currentRow["product_id"]);
+				$semIDArray[$x] = "$sem3_id,$seller,$product_id";
+			}
+			
+			$numProducts = count($semIDArray);
+			thisLogger::debug("This product is sold at  $numProducts different stores.");
+			return $semIDArray;
+		
+		} else {
+			
+			thisLogger::debug("Products could not be recognised");
+			return FALSE;
+		}
+	}
+	
+	static function updatePrice ($productID,$newPrice) {
+		
+		$con = self::openConnection();
+		$product_id = mysqli_real_escape_string($con,$productID);
+		$product_price = mysqli_real_escape_string($con,$newPrice);
+		
+		$updateThePrice = sprintf("UPDATE products SET product_price = '%s' WHERE product_id  = '%s'",$product_price,$product_id);
+		$con->query($updateThePrice);
+		
+		if ($con->affected_rows > 0) {
+			
+			thisLogger::debug("The product price has been updated successfully.");
+			//$currrentRow = $updateresults->fetch_assoc();
+			return TRUE;
+		} else {
+			
+			thisLogger::debug("Product porice could not be updated. Please see below.");
+			thisLogger::debug($con);
+			
+			//sendign an error mail tpo the admin when the app cannot update the updte the product price.
+			mail("koketso@connet-systems.com", "PRICE CHECK ERROR", "Price Check application could not update product price.\nPlease urgently check this isssue.\nThe product ID: $product_id");
+			
 			return FALSE;
 		}
 	}
